@@ -71,13 +71,13 @@ function apply_defaults() {
     done
 }
 
-function apply_defaults() {
-    for KEY in "${!DEFAULTS[@]}"; do
-        if $(eval "[ $(echo $KEY)z != z ]")  ; then
-            eval "$KEY=${DEFAULTS[$KEY]}"
-        fi
-    done
-}
+# function apply_defaults() {
+#     for KEY in "${!DEFAULTS[@]}"; do
+#         if $(eval "[ $(echo $KEY)z != z ]")  ; then
+#             eval "$KEY=${DEFAULTS[$KEY]}"
+#         fi
+#     done
+# }
 
 function verbose_args() {
     echo "--- ARGS ---"
@@ -180,12 +180,16 @@ install_minishift
 install_kvm_driver
 install_virtctl
 
+minishift start
+
+oc login -u system:admin
+
 exit
 
 #yum install centos-release-openshift-origin311
 #yum install origin-clients
 
-rm -rf minishift-1.30.0-linux-amd64
+rm -rf minishift-${MINISHIFT_VERSION}-linux-amd64
 rm minishift.tar.gz
 
 

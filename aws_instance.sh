@@ -6,10 +6,10 @@ IMAGE_OWNER_NUMBER=939345161466
 #KEYPAIR_NAME=kubevirt-demos
 
 declare -A DEFAULTS
-DEFAULTS[INSTANCE_NAME]=kubevirt-demos
+DEFAULTS[INSTANCE_NAME]=kubevirt
 DEFAULTS[KEYPAIR_USER]=centos
-DEFAULTS[KEYPAIR_NAME]=kubevirt-demos
-DEFAULTS[KEYPAIR_FILE]=~/.ssh/aws-kubevirt-demos.pem
+DEFAULTS[KEYPAIR_NAME]=kubevirt
+DEFAULTS[KEYPAIR_FILE]=~/.ssh/aws-kubevirt.pem
 
 # ============================================================================
 # PROCESS ARGUMENTS AND INPUTS
