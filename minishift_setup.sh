@@ -7,11 +7,11 @@
 declare -A DEFAULTS
 
 DEFAULTS[MINISHIFT_HOME]=${HOME}
-DEFAULTS[MINISHIFT_BIN]=${DEFAULTS[MINISHIFT_HOME]}/bin
+# DEFAULTS[MINISHIFT_BIN]=${DEFAULTS[MINISHIFT_HOME]}/bin
 DEFAULTS[MINISHIFT_TARBALL]=${DEFAULTS[MINISHIFT_HOME]}/minishift.tar.gz
-DEFAULTS[MINISHIFT_VERSION]=1.30.0
+DEFAULTS[MINISHIFT_VERSION]=1.34.0
 DEFAULTS[KVM_DRIVER_VERSION]=0.10.0
-DEFAULTS[KUBEVIRT_VERSION]=0.12.0
+DEFAULTS[KUBEVIRT_VERSION]=0.17.0
 DEFAULTS[KUBECONFIG]=${DEFAULTS[MINISHIFT_HOME]}/kubeconfig
 
 function usage() {
@@ -69,6 +69,13 @@ function apply_defaults() {
             eval "$KEY=${DEFAULTS[$KEY]}"
         fi
     done
+
+    if [ -z "${MINISHIFT_BIN}" ] ; then
+        MINISHIFT_BIN=${MINISHIFT_HOME}/bin
+    fi
+
+    export MINISHIFT_HOME
+    export PATH=${MINISHIFT_BIN}:$PATH
 }
 
 # function apply_defaults() {
@@ -92,14 +99,14 @@ function verbose_args() {
 
 function cleanup() {
     [ -x ${MINISHIFT_BIN}/minishift ] && ${MINISHIFT_BIN}/minishift delete --force
-    rm -f ${MINISHIFT_BIN}/{minishift,docker-machine-driver-kvm-centos7,virtctl,kubectl}
+    rm -f ${MINISHIFT_BIN}/{minishift,docker-machine-driver-kvm,virtctl,kubectl,oc}
     rm -f ${MINISHIFT_TARBALL}
     [ -d ${MINISHIFT_HOME}/.minishift ] && rm -r ${MINISHIFT_HOME}/.minishift
     rm -f ${KUBECONFIG}
 }
 
 function cleanup_old_runs() {
-    rm -rf ${MINIKUBE_HOME}/.minikube
+    rm -rf ${MINISHIFT_HOME}/.minikube
     rm -f ${KUBECONFIG}
 }
 
@@ -119,8 +126,8 @@ function debug() {
 # =============================================================================
 
 function define_file_locations() {
-    KUBECTL=${MINISHIFT_BIN}/kubectl
-    MINIKUBE=${MINISHIFT_BIN}/minikube
+    KUBECTL=${MINISHIFT_BIN}/oc
+    MINISHIFT=${MINISHIFT_BIN}/minishift
     KVM_DRIVER=${MINISHIFT_BIN}/docker-machine-driver-kvm
     VIRTCTL=${MINISHIFT_BIN}/virtctl
 }
@@ -149,6 +156,11 @@ function install_minishift() {
     chmod a+x ${MINISHIFT_BIN}/minishift
 }
 
+function copy_oc() {
+    find ${MINISHIFT_HOME}/cache/oc -type f -name oc | xargs -I{} cp {} ${MINISHIFT_BIN}/oc
+    chmod a+x ${MINISHIFT_BIN}/oc
+}
+
 function install_kvm_driver() {
     curl -L -o ${KVM_DRIVER} https://github.com/dhiltgen/docker-machine-kvm/releases/download/v${KVM_DRIVER_VERSION}/docker-machine-driver-kvm-centos7 
     chmod +x ${KVM_DRIVER}
@@ -157,6 +169,17 @@ function install_kvm_driver() {
 function install_virtctl() {
     curl --silent -L -o ${VIRTCTL} https://github.com/kubevirt/kubevirt/releases/download/v${KUBEVIRT_VERSION}/virtctl-v${KUBEVIRT_VERSION}-linux-amd64
     chmod a+x ${VIRTCTL}
+}
+
+function enable_nested_virt_emulation() {
+    ${KUBECTL} create configmap -n kubevirt kubevirt-config --from-literal debug.useEmulation=true
+}
+
+function install_kubevirt() {
+    local version=$1
+    ${KUBECTL} apply -f https://github.com/kubevirt/kubevirt/releases/download/v${version}/kubevirt-operator.yaml
+    enable_nested_virt_emulation
+    ${KUBECTL} apply -f https://github.com/kubevirt/kubevirt/releases/download/v${version}/kubevirt-cr.yaml
 }
 
 # ============================================================================
@@ -177,52 +200,13 @@ create_working_directories
 
 install_openshift_client
 install_minishift
+copy_oc
 install_kvm_driver
 install_virtctl
 
-minishift start
+${MINISHIFT_BIN}/minishift start
 
 oc login -u system:admin
 
-exit
-
-#yum install centos-release-openshift-origin311
-#yum install origin-clients
-
-rm -rf minishift-${MINISHIFT_VERSION}-linux-amd64
-rm minishift.tar.gz
-
-
-curl -L -o ~bin/docker-machine-driver-kvm https://github.com/dhiltgen/docker-machine-kvm/releases/download/v0.10.0/docker-machine-driver-kvm-centos7 
-chmod +x ~/bin/docker-machine-driver-kvm
-
-
-curl -L -o minishift.tar.gz https://github.com/minishift/minishift/releases/download/v1.30.0/minishift-1.30.0-linux-amd64.tgz
-
-tar -xzvf minishift.tar.gz minishift-1.30.0-linux-amd64/minishift
-cp minishift-1.30.0-linux-amd64/minishift ~/bin
-chmod a+x ~/bin/minishift
-
-minishift start
-
-oc login -u system:admin
-
-oc create configmap -n kube-system kubevirt-config --from-literal debug.useEmulation=true
-
-
-oc create configmap -n kube-system kubevirt-config --from-literal debug.useEmulation=true
-
-oc adm policy add-scc-to-user privileged system:serviceaccount:kube-system:kubevirt-privileged
-
-oc adm policy add-scc-to-user privileged system:serviceaccount:kube-system:kubevirt-controller
-
-oc adm policy add-scc-to-user privileged system:serviceaccount:kube-system:kubevirt-apiserver
-
-oc apply -f https://github.com/kubevirt/kubevirt/releases/download/v${KUBEVIRT_VERSION}/kubevirt.yaml
-
-curl -L -o ~/bin/virtctl \
-    https://github.com/kubevirt/kubevirt/releases/download/v${KUBEVIRT_VERSION}/virtctl-v${KUBEVIRT_VERSION}-linux-amd64
-chmod +x ~/bin/virtctl
-
-
-minishift delete --force --clear-cache
+enable_nested_virt_emulation
+install_kubevirt ${KUBEVIRT_VERSION}
